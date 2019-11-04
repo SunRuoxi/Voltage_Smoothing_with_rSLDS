@@ -41,7 +41,8 @@ def coordinate_gibbs_sampler_mtpl(rslds_compartments, network_rm_diag, Vs_obs, n
     return rslds_compartments, x_smpl_compartments, z_smpls_compartments
 
 
-def run_multiple_realshape(load_data = False):
+def run_multiple_realshape(sigmasq_value, penalty, load_data = False):
+    # sigmasq_value and penalty will need to be tuned for best performance. 
 
     directory = './results/'
 
@@ -97,9 +98,7 @@ def run_multiple_realshape(load_data = False):
 
 
     K = 3
-    sigmasq_value = 1
     D_latent= 2
-    penalty = 0.01
     N_samples_compartments = 10
     N_samples = 100
 
