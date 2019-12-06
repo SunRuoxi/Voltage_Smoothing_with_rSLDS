@@ -31,10 +31,9 @@ colors = sns.xkcd_palette(color_names)
 sns.set_style("white")
 sns.set_context("paper")
 
-def plot_most_likely_dynamics(
-                              reg, dynamics_distns, colors,
+def plot_most_likely_dynamics(reg, dynamics_distns, colors,
                               xlim=(-4, 4), ylim=(-3, 3), nxpts=20, nypts=10,
-                              alpha=0.8,
+                              alpha=0.8, I_inj=0,
                               ax=None, figsize=(3, 3)):
     K = len(dynamics_distns)
     D_latent = dynamics_distns[0].D_out
@@ -42,12 +41,12 @@ def plot_most_likely_dynamics(
     y = np.linspace(*ylim, nypts)
     X, Y = np.meshgrid(x, y)
     xy = np.column_stack((X.ravel(), Y.ravel()))
-    
+
     # Get the probability of each state at each xy location
     Ts = reg.get_trans_matrices(xy)
     prs = Ts[:, 0, :]
     z = np.argmax(prs, axis=1)
-    
+
     if ax is None:
         fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot(111)
@@ -57,13 +56,14 @@ def plot_most_likely_dynamics(
         A = dynamics_distns[k].A[:, :D_latent]
         b = dynamics_distns[k].A[:, D_latent:D_latent+1]
         F = dynamics_distns[k].A[:, D_latent+1:D_latent+2]
-        
-        dydt_m = xy.dot(A.T) + b.T  - xy
-        
+
+        dydt_m = xy.dot(A.T) + b.T + F.T * I_inj - xy
+
         zk = z == k
         if zk.sum(0) > 0:
             ax.quiver(xy[zk, 0], xy[zk, 1],
                       dydt_m[zk, 0], dydt_m[zk, 1],
+                      angles="xy",
                       color=colors[k], alpha=alpha)
 
     ax.set_xlabel('$x_1$')
@@ -75,11 +75,11 @@ def plot_most_likely_dynamics(
 
 
 def plot_z_by_class(t, z, K, colors, ax=None, figsize=(3,3), lw=2):
-    
+
     if ax is None:
         fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot(111)
-    
+
     points = np.array([t, z]).T.reshape(-1, 1, 2)
     segments = np.concatenate([points[:-1], points[1:]], axis=1)
     jump_idx = np.array([seg[0][1] != seg[1][1] for seg in segments])
@@ -105,22 +105,22 @@ def plot_z_by_class(t, z, K, colors, ax=None, figsize=(3,3), lw=2):
 
 
 def make_figure(rslds, zs_rslds, x_rslds):
-    
+
 
     fig = plt.figure(figsize=(10,10))
     gs = gridspec.GridSpec(2, 2)
-    
+
     fp = FontProperties()
     fp.set_weight("bold")
-    
+
 
     ax3 = fig.add_subplot(gs[0, 0])
     plot_most_likely_dynamics(rslds.trans_distn,
                               rslds.dynamics_distns, colors,
                               xlim=(-4, 8), ylim=(-.5, .5),
                               ax=ax3)
-        
-                              
+
+
     # Overlay a partial trajectory
     rplt.plot_trajectory(zs_rslds[-1], x_rslds, ax=ax3, ls="-")
     ax3.set_title("Inferred Dynamics (rSLDS)")
@@ -144,7 +144,7 @@ def make_figure(rslds, zs_rslds, x_rslds):
                                    rslds.dynamics_distns,
                                    xlim=(-4, 8), ylim=(-4, 10),
                                    ax=ax6)
-                              
+
     plt.tight_layout()
 
 
@@ -159,12 +159,12 @@ def plot_input_dynamics(
     y = np.linspace(*ylim, nypts)
     X, Y = np.meshgrid(x, y)
     xy = np.column_stack((X.ravel(), Y.ravel()))
-    
+
     # Get the probability of each state at each xy location
     Ts = reg.get_trans_matrices(xy)
     prs = Ts[:, 0, :]
     z = np.argmax(prs, axis=1)
-    
+
     if ax is None:
         fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot(111)
@@ -172,7 +172,7 @@ def plot_input_dynamics(
     for k in range(K):
         F = dynamics_distns[k].A[:, D_latent+1:D_latent+2]
         dydt = 10 * F
-        
+
         zk = z == k
         if zk.sum(0) > 0:
             ax.quiver(xy[zk, 0], xy[zk, 1],
@@ -185,26 +185,26 @@ def plot_input_dynamics(
     #ax.title('scale for V per 10mA of')
 
     plt.tight_layout()
-    
+
     return ax
 
 def plot_full_tree(paths, compartments_byid, select_compartments, directory):
-    
+
 
     fig, axes = plt.subplots(1, 2, sharey=True, sharex=True, figsize=(20, 10))
     axes[0].set_aspect('equal', 'box-forced')
     axes[1].set_aspect('equal', 'box-forced')
-    
-    
+
+
     # Make a line drawing of x-y and y-z views
-    
+
     for i, path in enumerate(paths):
         for j in range(len(path)-1):
             start_id = path[j]
             end_id = path[j+1]
             n = compartments_byid[start_id]
             c = compartments_byid[end_id]
-            
+
             axes[0].plot([n['x'], c['x']], [n['y'], c['y']], '.-', color=colors[i%len(colors)])
             axes[1].plot([n['z'], c['z']], [n['y'], c['y']], '.-', color=colors[i%len(colors)])
 
@@ -222,20 +222,20 @@ def plot_full_tree(paths, compartments_byid, select_compartments, directory):
 
 
 def plot_desampled_tree(path_compartments, compartments_byid, directory):
-    
+
     fig, axes = plt.subplots(1, 2, sharey=True, sharex=True, figsize=(20, 40))
     axes[0].set_aspect('equal', 'box-forced')
     axes[1].set_aspect('equal', 'box-forced')
-    
+
     # Make a line drawing of x-y and y-z views
-    
+
     for i, path in enumerate(path_compartments):
         for j in range(len(path)-1):
             start_id = path[j]
             end_id = path[j+1]
             n = compartments_byid[start_id]
             c = compartments_byid[end_id]
-            
+
             axes[0].plot([n['x'], c['x']], [n['y'], c['y']], '.-', color=colors[i%len(colors)])
             axes[1].plot([n['z'], c['z']], [n['y'], c['y']], '.-', color=colors[i%len(colors)])
 
@@ -245,15 +245,15 @@ def plot_desampled_tree(path_compartments, compartments_byid, directory):
     plt.savefig(directory+'desampled_tree.pdf',bbox_inches='tight')
 
 def plot_subtree(new_id, directory, paths, compartments_byid, p_start = 0, p_end = 7, axes=None, sz=12, point_sz=10):
-    
+
     if axes is None:
         fig, axes = plt.subplots(1, 2, sharey=True, sharex=True, figsize=(20, 20))
-    
+
     # Make a line drawing of x-y and y-z views
     fsz1 = 10
     fsz2 = 10
     lw = 3
-    
+
 
     p_end =  min(p_end, len(paths))
 
@@ -264,7 +264,7 @@ def plot_subtree(new_id, directory, paths, compartments_byid, p_start = 0, p_end
             end_id = path[j+1]
             n = compartments_byid[start_id]
             c = compartments_byid[end_id]
-            
+
             axes[0].plot([n['x'], c['x']], [n['y'], c['y']], '-', color=colors[i%len(colors)], linewidth=lw)
             axes[1].plot([n['z'], c['z']], [n['y'], c['y']], '-', color=colors[i%len(colors)], linewidth=lw)
 
@@ -309,37 +309,37 @@ def plot_inferred_bypath(paths_filtered, num_compartments, per_page, folder, t, 
         len_sum = 0
         for i in range(start, end):
             len_sum += len(paths_filtered[i])
-    
+
         plt.close('all')
         if len_sum > 40:
             fig = plt.figure(figsize=(7, 1 + 3 * (len_sum)))
         else:
             fig = plt.figure(figsize=(7, 1 + 4 * (len_sum)))
         nplot = (len_sum) * 2
-        
+
         plot_idx = 1
         for j, path in enumerate(paths_filtered[start:end]):
             for idx in path:
                 print(idx)
                 c = new_id[idx]
-                
+
                 plt.subplot(nplot, 1, plot_idx)
                 plt.plot(t[toplot], Vs_obs[toplot,c], 'black', label='obs')
                 plt.plot(t[toplot], x_smpl_compartments[c][-1][toplot,0], '--', label='inferred x', color=colors[(start+j)%len(colors)]);
                 plt.plot(t[toplot], Vs_true[toplot,c], 'r', label='True')
-                 
+
                 plt.legend()
-               
+
                 plt.xticks([0, 20, 40, 60, 80, 100], ['0', '20', '40', '60', '80', '100 ms'])
                 path_convert = [new_id[p] for p in path]
                 plt.title('PATH='+str(path_convert)+'. compartment '+str(c)+': inferred x')
                 plot_idx += 1
-                
+
                 plt.subplot(nplot, 1, plot_idx)
                 plt.plot(t[toplot], z_smpls_compartments[c][-1][-1,toplot], color=colors[(start+j)%len(colors)], label='inferred z');
 
                 plt.title('PATH='+str(path_convert)+'. compartment '+str(c)+': inferred z')
-                
+
                 plot_idx += 1
                 plt.legend()
         plt.xlabel('t (ms)')
@@ -347,22 +347,22 @@ def plot_inferred_bypath(paths_filtered, num_compartments, per_page, folder, t, 
         fig.savefig(folder+'new-train-compare-bypath-start=' + str(start) + '.pdf')
 
 def plot_latent(rslds, zs_rslds, x_rslds):
-    
- 
+
+
     fig = plt.figure(figsize=(10,10))
     gs = gridspec.GridSpec(2, 2)
-    
+
     fp = FontProperties()
     fp.set_weight("bold")
-    
+
     ax3 = fig.add_subplot(gs[0, 0])
     plot_most_likely_dynamics(rslds.trans_distn,
                               rslds.dynamics_distns,
                               xlim=(-4, 8), ylim=(-.5, .5),
                               ax=ax3)
-        
-        
-        
+
+
+
     # Overlay a partial trajectory
     rplt.plot_trajectory(zs_rslds[-1], x_rslds, ax=ax3, ls="-")
     ax3.set_title("Inferred Dynamics (rSLDS)")
@@ -384,50 +384,9 @@ def plot_latent(rslds, zs_rslds, x_rslds):
                                rslds.dynamics_distns,
                                xlim=(-4, 8), ylim=(-4, 10),
                                ax=ax6)
-        
-    plt.tight_layout()
-
-def plot_most_likely_dynamics(
-                              reg, dynamics_distns,
-                              xlim=(-4, 4), ylim=(-3, 3), nxpts=20, nypts=10,
-                              alpha=0.8,
-                              ax=None, figsize=(3, 3)):
-    K = len(dynamics_distns)
-    D_latent = dynamics_distns[0].D_out
-    x = np.linspace(*xlim, nxpts)
-    y = np.linspace(*ylim, nypts)
-    X, Y = np.meshgrid(x, y)
-    xy = np.column_stack((X.ravel(), Y.ravel()))
-    
-    # Get the probability of each state at each xy location
-    Ts = reg.get_trans_matrices(xy)
-    prs = Ts[:, 0, :]
-    z = np.argmax(prs, axis=1)
-    
-    if ax is None:
-        fig = plt.figure(figsize=figsize)
-        ax = fig.add_subplot(111)
-
-    for k in range(K):
-        A = dynamics_distns[k].A[:, :D_latent]
-        b = dynamics_distns[k].A[:, D_latent:D_latent+1]
-        F = dynamics_distns[k].A[:, D_latent+1:D_latent+2]
-        
-        dydt_m = xy.dot(A.T) + b.T  - xy
-        
-        zk = z == k
-        if zk.sum(0) > 0:
-            ax.quiver(xy[zk, 0], xy[zk, 1],
-                      dydt_m[zk, 0], dydt_m[zk, 1],
-                      scale=10, scale_units="inches",
-                      color=colors[k], alpha=alpha)
-
-    ax.set_xlabel('$V$')
-    ax.set_ylabel('$\Delta V$')
 
     plt.tight_layout()
 
-    return ax
 
 def plot_input_dynamics(
                         reg, dynamics_distns,
@@ -440,12 +399,12 @@ def plot_input_dynamics(
     y = np.linspace(*ylim, nypts)
     X, Y = np.meshgrid(x, y)
     xy = np.column_stack((X.ravel(), Y.ravel()))
-    
+
     # Get the probability of each state at each xy location
     Ts = reg.get_trans_matrices(xy)
     prs = Ts[:, 0, :]
     z = np.argmax(prs, axis=1)
-    
+
     if ax is None:
         fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot(111)
@@ -453,7 +412,7 @@ def plot_input_dynamics(
     for k in range(K):
         F = dynamics_distns[k].A[:, D_latent+1:D_latent+2]
         dydt = 10 * F
-        
+
         zk = z == k
         if zk.sum(0) > 0:
             ax.quiver(xy[zk, 0], xy[zk, 1],
@@ -465,7 +424,7 @@ def plot_input_dynamics(
     ax.set_ylabel('$\Delta V$')
 
     plt.tight_layout()
-    
+
     return ax
 
 def plot_other_compartments_dynamics(
@@ -479,12 +438,12 @@ def plot_other_compartments_dynamics(
     y = np.linspace(*ylim, nypts)
     X, Y = np.meshgrid(x, y)
     xy = np.column_stack((X.ravel(), Y.ravel()))
-    
+
     # Get the probability of each state at each xy location
     Ts = reg.get_trans_matrices(xy)
     prs = Ts[:, 0, :]
     z = np.argmax(prs, axis=1)
-    
+
     if ax is None:
         fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot(111)
@@ -492,7 +451,7 @@ def plot_other_compartments_dynamics(
     for k in range(K):
         F = dynamics_distns[k].A[:, D_latent+2:D_latent+3]
         dydt = 10 * F
-        
+
         zk = z == k
         if zk.sum(0) > 0:
             ax.quiver(xy[zk, 0], xy[zk, 1],
@@ -505,7 +464,7 @@ def plot_other_compartments_dynamics(
 
 
     plt.tight_layout()
-    
+
     return ax
 
 

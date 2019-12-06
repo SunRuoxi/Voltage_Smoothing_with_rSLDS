@@ -6,15 +6,15 @@ from tqdm import tqdm
 import numpy.random as npr
 import matplotlib.pyplot as plt
 import rslds.plotting as rplt
-from NIPS_plots import plot_full_tree, plot_desampled_tree, plot_subtree, plot_inferred_bypath, plot_latent, plot_most_likely_dynamics
-from NIPS_utils import make_roslds_mtpl, run_gibbs_sampler, MultiCompartmentHodgkinHuxley, load_realdata_morphology
+from plots import plot_full_tree, plot_desampled_tree, plot_subtree, plot_inferred_bypath, plot_latent, plot_most_likely_dynamics
+from utils import make_roslds_mtpl, run_gibbs_sampler, MultiCompartmentHodgkinHuxley, load_realdata_morphology
 
 def coordinate_gibbs_sampler_mtpl(rslds_compartments, network_rm_diag, Vs_obs, num_compartments):
     Vs_inferred = Vs_obs.copy()
-    
+
     z_smpls_compartments = [[] for _ in range(num_compartments)]
     x_smpl_compartments = [[] for _ in range(num_compartments)]
- 
+
     for nter in tqdm(range(N_samples)):
 
         for j in range(num_compartments):
@@ -23,16 +23,16 @@ def coordinate_gibbs_sampler_mtpl(rslds_compartments, network_rm_diag, Vs_obs, n
             lps, z_smpls, x_smpl = run_gibbs_sampler(rslds_compartments[j], N_samples=N_samples_compartments)
             x_smpl_compartments[j].append(x_smpl)
             z_smpls_compartments[j].append(z_smpls)
-            
+
             # Now update the voltage of this compartment in Vs_inferred
             Vs_inferred[:, j] = x_smpl[:,0]
-                
+
             # Compute the new "inputs" to all compartments using the updated Vs
             # network_rm_diag: receiving compartment x sending compartment
             # Vs_inferred: time x sending_compartment
             # V_compartments: receiving compartment x time
             V_compartments = network_rm_diag.dot(Vs_inferred.T)
-            
+
             # Now update the inputs to each compartment
             # The second input is the summed, weighted voltage from other compartments
             for c in range(num_compartments):
@@ -42,7 +42,7 @@ def coordinate_gibbs_sampler_mtpl(rslds_compartments, network_rm_diag, Vs_obs, n
 
 
 def run_multiple_realshape(sigmasq_value, penalty, load_data = False):
-    # sigmasq_value and penalty will need to be tuned for best performance. 
+    # sigmasq_value and penalty will need to be tuned for best performance.
 
     directory = './results/'
 
@@ -60,8 +60,8 @@ def run_multiple_realshape(sigmasq_value, penalty, load_data = False):
     per_page = 10
     for j in range(0, len(paths), per_page):
         plot_subtree(new_id, directory, paths, compartments_byid, p_start = j, p_end = j + per_page)
-    
-    
+
+
     num_compartments = network.shape[0]
     conductance = 5
     network = network * conductance
@@ -69,7 +69,7 @@ def run_multiple_realshape(sigmasq_value, penalty, load_data = False):
     network_offdiag = network - np.diag(np.diag(network))
     np.fill_diagonal(network,  -np.sum(network_offdiag, axis=1))
     plt.figure(); plt.imshow(network[:200,:200]); plt.title('dist'); plt.colorbar(); plt.savefig(directory+'dist, conductance='+str(conductance) +'-modified.png')
-    
+
     seed =  0
     npr.seed(seed)
 
@@ -104,15 +104,15 @@ def run_multiple_realshape(sigmasq_value, penalty, load_data = False):
 
     # to save
     str_name = 'UPDATE' + ', seed='+str(seed)+ ', num_compart=' + str(num_compartments) + ', K=' + str(K) + ', sigmasq_value='+ str(sigmasq_value) + ', penalty=' + str(penalty) +', Niter=' + str(N_samples)+ ', noise_std=' +str(noise_std)+ ', t_train=' + str(t_train) + ', conductance=' + str(conductance) + '-newini' + ', N_samples_compartments='+str(N_samples_compartments)
-    
+
 
     file = directory + str_name
-    
+
     # initialize a series of rslds
     rslds_compartments = []
     V_compartments = network.dot(Vs_obs.T)
     for j in range(num_compartments):
-        
+
         rslds = make_roslds_mtpl(Vs_obs[:,j], I_inj_values[:,j], V_compartments[j,:], K=K, D_latent=D_latent, sigmasq_value=sigmasq_value, penalty=penalty)
 
         rslds_compartments.append(rslds)
@@ -135,7 +135,7 @@ def run_multiple_realshape(sigmasq_value, penalty, load_data = False):
         plt.close('all')
         plot_latent(rslds_compartments[c], z_smpls_compartments[c][-1], x_smpl_compartments[c][-1])
         plt.savefig(file+'cmpt'+str(c)+'-latent.pdf')
-            
+
     # save results
     save_name = 'trial'+str(noise_std)
     np.savez(directory + save_name, x_smpl_compartments=x_smpl_compartments,  z_smpls_compartments=z_smpls_compartments,  t= t,  I_inj_value = I_inj_values, Vs_obs=Vs_obs, Vs_true=Vs_true, I_inj_values =I_inj_values)
